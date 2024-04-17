@@ -2,9 +2,21 @@ use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::mpsc::{sync_channel, SyncSender};
 
+use anyhow::Context;
+use tracing::level_filters::LevelFilter;
+use tracing_subscriber::EnvFilter;
+
 use data_sink::message::{KeepAlive, Measurement};
 
 fn main() -> anyhow::Result<()> {
+    // Setup logging
+    let filter = EnvFilter::builder()
+        .with_default_directive(LevelFilter::INFO.into())
+        .from_env()
+        .context("Invalid log filter in RUST_LOG")?;
+    tracing_subscriber::fmt().with_env_filter(filter).init();
+
+    // Setup backend
     let (sender, receiver) = sync_channel(1_000_000);
     std::thread::spawn(move || data_sink::database::run(receiver));
 
@@ -17,16 +29,22 @@ fn main() -> anyhow::Result<()> {
     }
 }
 
+#[tracing::instrument(skip_all, fields(peer_addr = %socket.peer_addr()?), err)]
 pub fn handle_client(socket: TcpStream, backend: SyncSender<Measurement>) -> anyhow::Result<()> {
+    tracing::info!("New connection");
+
     let mut buffered = BufReader::new(socket);
 
     loop {
         let mut line = String::new();
         buffered.read_line(&mut line)?;
 
-        match serde_json::from_str(&line) {
-            Ok(parsed) => backend.send(parsed)?,
-            Err(e) => eprintln!("Could not deserialize {line:?}, because {e:?}"),
+        match serde_json::from_str::<Measurement>(&line) {
+            Ok(parsed) => {
+                tracing::debug!(node_id = parsed.node_id, "Received measurement");
+                backend.send(parsed)?;
+            }
+            Err(err) => tracing::error!(?err, line, "Failed to deserialize"),
         }
 
         // Make sure the sensor knows everything is still ok...

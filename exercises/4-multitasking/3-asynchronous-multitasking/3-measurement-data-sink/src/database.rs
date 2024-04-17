@@ -13,6 +13,7 @@ struct DatabaseRow {
     total_fires: u64,
 }
 
+#[tracing::instrument(skip_all)]
 pub fn run(receiver: Receiver<Measurement>) -> anyhow::Result<()> {
     let mut database = csv::Writer::from_path("database.csv")?;
 
@@ -29,7 +30,8 @@ pub fn run(receiver: Receiver<Measurement>) -> anyhow::Result<()> {
             rooms.entry(meas.room_id).or_default().push(meas);
         }
 
-        println!("Got data for {} rooms", rooms.len());
+        let measurements: usize = rooms.values().map(Vec::len).sum();
+        tracing::info!(rooms = rooms.len(), measurements, "Collected data batch");
 
         // Average by room and append to highly sophisticated database
         for (room, measurements) in rooms {
