@@ -1,6 +1,9 @@
+// use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+// use tokio::net::{TcpListener, TcpStream};
+// use tokio::sync::mpsc;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
-use std::sync::mpsc::{sync_channel, SyncSender};
+use std::sync::mpsc;
 
 use anyhow::Context;
 use tracing::level_filters::LevelFilter;
@@ -17,20 +20,21 @@ fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt().with_env_filter(filter).init();
 
     // Setup backend
-    let (sender, receiver) = sync_channel(1_000_000);
-    std::thread::spawn(move || data_sink::database::run(receiver));
+    let (sender, receiver) = mpsc::channel();
+    std::thread::spawn(move || data_sink::database::run(receiver)); // TODO: Change to tokio::task
 
     let listener = TcpListener::bind("[::1]:8080")?;
 
     loop {
         let (socket, _) = listener.accept()?;
         let sender = sender.clone();
-        std::thread::spawn(move || handle_client(socket, sender));
+        std::thread::spawn(move || handle_client(socket, sender)); // TODO: Change to tokio::task
     }
 }
 
+// NOTE: make this an async fn
 #[tracing::instrument(skip_all, fields(peer_addr = %socket.peer_addr()?), err)]
-pub fn handle_client(socket: TcpStream, backend: SyncSender<Measurement>) -> anyhow::Result<()> {
+pub fn handle_client(socket: TcpStream, backend: mpsc::Sender<Measurement>) -> anyhow::Result<()> {
     tracing::info!("New connection");
 
     let mut buffered = BufReader::new(socket);
@@ -55,6 +59,6 @@ pub fn handle_client(socket: TcpStream, backend: SyncSender<Measurement>) -> any
         };
         let mut json = serde_json::to_string(&msg)?;
         json.push('\n');
-        buffered.get_ref().write_all(json.as_bytes())?;
+        buffered.get_mut().write_all(json.as_bytes())?;
     }
 }

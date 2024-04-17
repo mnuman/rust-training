@@ -13,6 +13,7 @@ struct DatabaseRow {
     total_fires: u64,
 }
 
+// TODO asyncify
 #[tracing::instrument(skip_all)]
 pub fn run(receiver: Receiver<Measurement>) -> anyhow::Result<()> {
     let mut database = csv::Writer::from_path("database.csv")?;
@@ -26,9 +27,11 @@ pub fn run(receiver: Receiver<Measurement>) -> anyhow::Result<()> {
 
         // Group measurements by room
         let mut rooms: BTreeMap<_, Vec<_>> = BTreeMap::new();
-        for meas in receiver.try_iter() {
+        while let Ok(meas) = receiver.try_recv() {
             rooms.entry(meas.room_id).or_default().push(meas);
         }
+
+        // NOTE don't bother about the code below, unless you have extra time
 
         let measurements: usize = rooms.values().map(Vec::len).sum();
         tracing::info!(rooms = rooms.len(), measurements, "Collected data batch");
