@@ -16,6 +16,8 @@ enum Expr {
     Const(i64),
     Add(Box<Expr>, Box<Expr>),
     Sub(Box<Expr>, Box<Expr>),
+    Mul(Box<Expr>, Box<Expr>),
+    Div(Box<Expr>, Box<Expr>),
     Var,
     Summation(Vec<Expr>),
 }
@@ -36,11 +38,11 @@ fn sub(x: Expr, y: Expr) -> Expr {
 }
 
 fn mul(x: Expr, y: Expr) -> Expr {
-    todo!()
+    Expr::Mul(Box::new(x), Box::new(y))
 }
 
 fn div(x: Expr, y: Expr) -> Expr {
-    todo!()
+    Expr::Div(Box::new(x), Box::new(y))
 }
 
 // ...
@@ -53,6 +55,8 @@ fn eval(expr: &Expr, var: i64) -> i64 {
         Var => var,
         Add(lhs, rhs) => eval(lhs, var) + eval(rhs, var),
         Sub(lhs, rhs) => eval(lhs, var) - eval(rhs, var),
+        Mul(lhs, rhs) => eval(lhs, var) * eval(rhs, var),
+        Div(lhs, rhs) => eval(lhs, var) / eval(rhs, var),
 
         Summation(exprs) => {
             let mut acc = 0;
@@ -93,6 +97,8 @@ mod test {
         assert_eq!(eval(&Const(5), x), 5);
         assert_eq!(eval(&Var, x), 42);
         assert_eq!(eval(&sub(Var, Const(5)), x), 37);
+        assert_eq!(eval(&mul(Var, Var), x), 42 * 42);
+        assert_eq!(eval(&div(Var, Var), x), 42 / 42);
         assert_eq!(eval(&sub(Var, Var), x), 0);
         assert_eq!(eval(&add(sub(Var, Const(5)), Const(5)), x), 42);
         assert_eq!(eval(&Summation(vec![Var, Const(1)]), x), 43);
